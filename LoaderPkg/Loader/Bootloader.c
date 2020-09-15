@@ -113,6 +113,11 @@ InitGraphics (
   //
   // Hint: Use GetMode/SetMode functions.
   //
+  GraphicsOutput->SetMode (
+    GraphicsOutput,
+    10
+    );
+    
 
   //
   // Fill screen with black.
@@ -968,7 +973,7 @@ UefiMain (
   UINTN              EntryPoint;
   VOID               *GateData;
 
-#if 1 ///< Uncomment to await debugging
+/*#if 1 ///< Uncomment to await debugging
   volatile BOOLEAN   Connected;
   DEBUG ((DEBUG_INFO, "JOS: Awaiting debugger connection\n"));
 
@@ -976,7 +981,7 @@ UefiMain (
   while (!Connected) {
     ;
   }
-#endif
+#endif*/
 
   Status = gRT->GetTime (&Now, NULL);
   if (EFI_ERROR (Status)) {
