@@ -23,6 +23,7 @@ struct Command {
 static struct Command commands[] = {
     {"help", "Display this list of commands", mon_help},
     {"hello", "Display greeting message", mon_hello},
+    {"random_text", "Display random text", mon_randtext},
     {"kerninfo", "Display information about the kernel", mon_kerninfo},
     {"backtrace", "Print stack backtrace", mon_backtrace}};
 #define NCOMMANDS (sizeof(commands) / sizeof(commands[0]))
@@ -41,6 +42,12 @@ mon_help(int argc, char **argv, struct Trapframe *tf) {
 int
 mon_hello(int argc, char **argv, struct Trapframe *tf) {
   cprintf("Hello!\n");
+  return 0;
+}
+
+int
+mon_randtext(int argc, char **argv, struct Trapframe *tf) {
+  cprintf("Oh, thats random text!\n");
   return 0;
 }
 
@@ -66,7 +73,19 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf) {
 
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf) {
-  // LAB 2: Your code here.
+  cprintf("Stack backtrace:\n");
+  unsigned long rbp = read_rbp();
+  struct Ripdebuginfo info;
+  while(rbp) {
+    unsigned long rip = *((unsigned long *)(rbp + 8));
+    if (debuginfo_rip(rip, &info)) {
+      cprintf("Debuginfo_rip -- ERROR\n");
+    }
+    cprintf("  rbp %016lx  rip  %016lx\n", rbp, rip);
+    cprintf("      %.256s:%d: ", info.rip_file, info.rip_line );
+    cprintf("%.*s+%ld\n", info.rip_fn_namelen, info.rip_fn_name, rip - info.rip_fn_addr );
+    rbp = *((unsigned long *)rbp);
+  }
   return 0;
 }
 
