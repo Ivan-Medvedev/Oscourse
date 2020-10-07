@@ -219,6 +219,9 @@ env_alloc(struct Env **newenv_store, envid_t parent_id) {
   e->env_tf.tf_rsp = STACK_TOP + PGSIZE * (e - envs);
 #else
 #endif
+
+  e->env_tf.tf_rflags |= FL_IF;
+
   // You will set e->env_tf.tf_rip later.
 
   // commit the allocation
@@ -418,6 +421,7 @@ env_pop_tf(struct Trapframe *tf) {
 #ifdef CONFIG_KSPACE
   static uintptr_t rip = 0;
   rip                  = tf->tf_rip;
+  tf->tf_rflags &= ~FL_IF;
 
   asm volatile(
       "movq %c[rbx](%[tf]), %%rbx \n\t"
@@ -439,6 +443,7 @@ env_pop_tf(struct Trapframe *tf) {
       "pushq %c[rflags](%[tf])\n\t"
       "movq %c[rax](%[tf]), %%rax\n\t"
       "popfq\n\t"
+      "sti\n\t"
       "ret\n\t"
       :
       : [ tf ] "a"(tf),	
