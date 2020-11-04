@@ -11,6 +11,8 @@
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
+#include <kern/tsc.h>
+#include <kern/timer.h>
 #include <kern/env.h>
 
 #define CMDBUF_SIZE 80 // enough for one VGA text line
@@ -22,11 +24,16 @@ struct Command {
   int (*func)(int argc, char **argv, struct Trapframe *tf);
 };
 
+// LAB 5: Your code here.
+// Implement timer_start (mon_start), timer_stop (mon_stop), timer_freq (mon_frequency) commands.
 static struct Command commands[] = {
     {"help", "Display this list of commands", mon_help},
     {"hello", "Display greeting message", mon_hello},
     {"random_text", "Display random text", mon_randtext},
     {"kerninfo", "Display information about the kernel", mon_kerninfo},
+    {"timer_start", "Start timer", mon_start},
+    {"timer_stop", "Stop timer", mon_stop},
+    {"timer_freq", "Count processor frequency", mon_frequency},
     {"backtrace", "Print stack backtrace", mon_backtrace}};
 #define NCOMMANDS (sizeof(commands) / sizeof(commands[0]))
 
@@ -88,6 +95,32 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf) {
     cprintf("%.*s+%ld\n", info.rip_fn_namelen, info.rip_fn_name, rip - info.rip_fn_addr );
     rbp = *((unsigned long *)rbp);
   }
+  return 0;
+}
+
+// LAB 5: Your code here.
+// Implement timer_start (mon_start), timer_stop (mon_stop), timer_freq (mon_frequency) commands.
+int
+mon_start(int argc, char **argv, struct Trapframe *tf) {
+  if (argc != 2) {
+    return 1;
+  }
+  timer_start(argv[1]);
+  return 0;
+}
+
+int
+mon_stop(int argc, char **argv, struct Trapframe *tf) {
+  timer_stop();
+  return 0;
+}
+
+int
+mon_frequency(int argc, char **argv, struct Trapframe *tf) {
+  if (argc != 2) {
+    return 1;
+  }
+  timer_cpu_frequency(argv[1]);
   return 0;
 }
 
