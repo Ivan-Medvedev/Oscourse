@@ -164,15 +164,26 @@ boot_alloc(uint32_t n) {
   // which points to the end of the kernel's bss segment:
   // the first virtual address that the linker did *not* assign
   // to any kernel code or global variables.
+  if (!nextfree) {
+    extern char end[];
+    nextfree = ROUNDUP((char *)end, PGSIZE);
+  }
 
   // Allocate a chunk large enough to hold 'n' bytes, then update
   // nextfree.  Make sure nextfree is kept aligned
   // to a multiple of PGSIZE.
   //
   // LAB 6: Your code here.
+  if (!n) {
+    return nextfree;
+  }
+  char *res = nextfree;
+  nextfree += ROUNDUP(n, PGSIZE);
+  if (PADDR(nextfree) > PGSIZE * npages) {
+    panic("Out of memory on boot");
+  }
 
-  (void)nextfree;
-  return NULL;
+  return res;
 }
 
 // Set up a two-level page table:
@@ -216,6 +227,8 @@ mem_init(void) {
   // array.  'npages' is the number of physical pages in memory.  Use memset
   // to initialize all fields of each struct PageInfo to 0.
   // LAB 6: Your code here.
+  pages = (struct PageInfo *)boot_alloc(sizeof(*pages) * npages);
+  memset(pages, 0, sizeof(*pages) * npages);
 
   //////////////////////////////////////////////////////////////////////
   // Now that we've allocated the initial kernel data structures, we set
@@ -308,10 +321,10 @@ page_init(void) {
 
   //  2) The rest of base memory, [PGSIZE, npages_basemem * PGSIZE)
   //     is free.
-  pages[2].pp_ref = 0;
-  page_free_list  = &pages[2];
-  last            = &pages[2];
-  for (i = 2; i < npages_basemem; i++) {
+  pages[1].pp_ref = 0;
+  page_free_list  = &pages[1];
+  last            = &pages[1];
+  for (i = 1; i < npages_basemem; i++) {
     if (is_page_allocatable(i)) {
       pages[i].pp_ref = 0;
       last->pp_link   = &pages[i];
