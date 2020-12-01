@@ -91,19 +91,19 @@ acpi_enable(void) {
 }
 
 // Obtain RSDP ACPI table address from bootloader.
-//RSDP *
-//get_rsdp(void) {
-//  static void *krsdp = NULL;
-//
-//  if (krsdp != NULL)
-//    return krsdp;
-//
-//  if (uefi_lp->ACPIRoot == 0)
-//    panic("No rsdp\n");
-//
-//  krsdp = mmio_map_region(uefi_lp->ACPIRoot, sizeof(RSDP));
-//  return krsdp;
-//}
+RSDP *
+get_rsdp(void) {
+  static void *krsdp = NULL;
+
+  if (krsdp != NULL)
+    return krsdp;
+
+  if (uefi_lp->ACPIRoot == 0)
+    panic("No rsdp\n");
+
+  krsdp = mmio_map_region(uefi_lp->ACPIRoot, sizeof(RSDP));
+  return krsdp;
+}
 
 // LAB 5 code
 static void * acpi_find_table(const char * sign) {

@@ -81,7 +81,7 @@ sys_yield:
 .globl sys_exit
 .type  sys_exit, @function
 sys_exit:
-  cli
+  cli  # LAB 4
   leaq bootstacktop(%rip),%rsp
   xorq %rbp, %rbp
   call csys_exit

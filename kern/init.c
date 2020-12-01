@@ -151,8 +151,6 @@ i386_init(void) {
   // user environment initialization functions
   env_init();
 
-  //irq_setmask_8259A(irq_mask_8259A & ~(1 << IRQ_CLOCK));
-
   // choose the timer used for scheduling: hpet or pit
   timers_schedule("hpet0");
   clock_idt_init();
