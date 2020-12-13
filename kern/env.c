@@ -202,7 +202,13 @@ env_setup_vm(struct Env *e) {
   //    - The functions in kern/pmap.h are handy.
 
   // LAB 8: Your code here.
+  e->env_pml4e = page2kva(p);
+  e->env_cr3 = page2pa(p);
 
+  e->env_pml4e[1] = kern_pml4e[1];
+  pa2page(PTE_ADDR(kern_pml4e[1]))->pp_ref++;
+
+  e->env_pml4e[2] = e->env_cr3 | PTE_P | PTE_U;
   return 0;
 }
 
@@ -304,6 +310,15 @@ region_alloc(struct Env *e, void *va, size_t len) {
   //   'va' and 'len' values that are not page-aligned.
   //   You should round va down, and round (va + len) up.
   //   (Watch out for corner-cases!)
+  void *end = ROUNDUP(va + len, PGSIZE);
+  va = ROUNDDOWN(va, PGSIZE);
+  struct PageInfo *pi;
+
+  while (va < end) {
+    pi = page_alloc(0);
+    page_insert(e->env_pml4e, pi, va, PTE_U | PTE_W);
+    va += PGSIZE;
+  }
 }
 
 #ifdef SANITIZE_USER_SHADOW_BASE
@@ -436,34 +451,48 @@ load_icode(struct Env *e, uint8_t *binary) {
   //  What?  (See env_run() and env_pop_tf() below.)
 
   // LAB 3: Your code here.
-//<<<<<<< HEAD
-  struct Elf *elfhdr = (struct Elf *)binary;
-  if (elfhdr->e_magic != ELF_MAGIC) {
-    panic("load_icode: invalid elf header");
+  struct Elf *elf = (struct Elf *)binary; // binary приодится к типу указателя на структуру ELF
+  if (elf->e_magic != ELF_MAGIC) {
+    panic("Unexpected ELF format! What magic is this?\n");
   }
 
-  // load each program segment
-  struct Proghdr *ph = (struct Proghdr *)(binary + elfhdr->e_phoff);
-  struct Proghdr *eph = ph + elfhdr->e_phnum;
+  struct Proghdr *ph = (struct Proghdr *)(binary + elf->e_phoff); // Proghdr = prog header. Он лежит со смещением elf->e_phoff относительно начала фаила
 
-  for (; ph < eph; ph++) {
-    if (ph->p_type == ELF_PROG_LOAD) {
-      if (ph->p_filesz > ph->p_memsz) {
-        panic("load_icode: invalid program header (p_filesz > p_memsz)");
-      }
-      memcpy((uint8_t *)ph->p_va, binary + ph->p_offset, ph->p_filesz);
-      memset((uint8_t *)ph->p_va + ph->p_filesz, 0, ph->p_memsz - ph->p_filesz);
+  lcr3(PADDR(e->env_pml4e));
+  for (size_t i = 0; i < elf->e_phnum; i++) { // elf->e_phnum - Число заголовков программы. Если у файла нет таблицы заголовков программы, это поле содержит 0.
+    if (ph[i].p_type == ELF_PROG_LOAD) {
+
+      void *src = (void *)(binary + ph[i].p_offset);
+      void *dst = (void *)ph[i].p_va;
+
+      size_t memsz  = ph[i].p_memsz;
+      size_t filesz = MIN(ph[i].p_filesz, memsz);
+
+      region_alloc(e, (void*) dst, memsz);
+
+      memcpy(dst, src, filesz);                // копируем в dst <- src  размера filesz
+      memset(dst + filesz, 0, memsz - filesz); // обнуление памяти по адресу dst + filesz, где количество нулей = memsz - filesz. Т.е. зануляем всю выделенную память сегмента кода, оставшуюяся после копирования src. Возможно, эта строка не нужна
     }
   }
-  e->env_tf.tf_rip = elfhdr->e_entry;
 
+  lcr3(PADDR(kern_pml4e));
+  e->env_tf.tf_rip = elf->e_entry; //Виртуальный адрес точки входа, которому система передает управление при запуске процесса. в регистр rip записываем адрес точки входа для выполнения процесса
 #ifdef CONFIG_KSPACE
-  bind_functions(e, elfhdr);
+  bind_functions(e, binary); // Вызывается bind_functions, который связывает все что мы сделали выше (инициализация среды) с "кодом" самого процесса
 #endif
-//=======
-  // LAB 8: Your code here.
+  // LAB 3 code end
 
-//>>>>>>> lab8
+  // LAB 8 code
+  region_alloc(e, (void *) (USTACKTOP - USTACKSIZE), USTACKSIZE);
+  // LAB 8 code end
+
+#ifdef SANITIZE_USER_SHADOW_BASE
+  region_alloc(e, (void*) SANITIZE_USER_SHADOW_BASE, SANITIZE_USER_SHADOW_SIZE);
+  region_alloc(e, (void*) SANITIZE_USER_EXTRA_SHADOW_BASE, SANITIZE_USER_EXTRA_SHADOW_SIZE);
+  region_alloc(e, (void*) SANITIZE_USER_FS_SHADOW_BASE, SANITIZE_USER_FS_SHADOW_SIZE);
+  region_alloc(e, (void*) SANITIZE_USER_STACK_SHADOW_BASE, SANITIZE_USER_STACK_SHADOW_SIZE);
+  region_alloc(e, (void*) SANITIZE_USER_VPT_SHADOW_BASE, SANITIZE_USER_VPT_SHADOW_SIZE);
+#endif
 }
 
 //
@@ -699,16 +728,23 @@ env_run(struct Env *e) {
   //	e->env_tf to sensible values.
   //
   // LAB 3: Your code here.
-<<<<<<< HEAD
-  if (curenv != NULL && curenv->env_status == ENV_RUNNING) {
-    curenv->env_status = ENV_RUNNABLE;
+  if (curenv) {  // if curenv == False, значит, какого-нибудь исполняемого процесса нет
+    if (curenv->env_status == ENV_DYING) { // если процесс стал зомби
+      struct Env *old = curenv;  // ставим старый адрес
+      env_free(curenv);
+      if (old == e) { // e - аргумент функции, который к нам пришел
+        sched_yield();  // переключение системными вызовами
+      }
+    } else if (curenv->env_status == ENV_RUNNING) { // если процесс можем запустить
+      curenv->env_status = ENV_RUNNABLE;  // запускаем процесс
+    }
   }
-  curenv = e;
-  e->env_status = ENV_RUNNING;
-  e->env_runs++;
-  env_pop_tf(&e->env_tf);
-=======
-  // LAB 8: Your code here.
+  curenv = e;  // текущая среда – е
+  curenv->env_status = ENV_RUNNING; // устанавливаем статус среды на "выполняется"
+  curenv->env_runs++; // обновляем количество работающих контекстов
+
+  lcr3(curenv->env_cr3);
+  env_pop_tf(&curenv->env_tf);
+
   while(1) {}
->>>>>>> lab8
 }

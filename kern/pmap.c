@@ -245,6 +245,8 @@ mem_init(void) {
   //////////////////////////////////////////////////////////////////////
   // Make 'envs' point to an array of size 'NENV' of 'struct Env'.
   // LAB 8: Your code here.
+  envs = (struct Env *)boot_alloc(sizeof(* envs) * NENV);
+  memset(envs, 0, sizeof(*envs) * NENV);
 
   //////////////////////////////////////////////////////////////////////
   // Now that we've allocated the initial kernel data structures, we set
@@ -278,6 +280,7 @@ mem_init(void) {
   //    - the new image at UENVS  -- kernel R, user R
   //    - envs itself -- kernel RW, user NONE
   // LAB 8: Your code here.
+  boot_map_region(kern_pml4e, UENVS, ROUNDUP(NENV * sizeof(*envs), PGSIZE), PADDR(envs), PTE_U | PTE_P);
 
   //////////////////////////////////////////////////////////////////////
   // Use the physical memory that 'bootstack' refers to as the kernel
@@ -855,6 +858,26 @@ static uintptr_t user_mem_check_addr;
 int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm) {
   // LAB 8: Your code here.
+  perm = perm | PTE_P;
+
+
+  const void *end = va + len;
+  const void *va_b = va;
+  va = (void*) ROUNDDOWN(va, PGSIZE);
+  while (va < end)
+  {
+    pte_t *pte = pml4e_walk(env->env_pml4e, va, 0);
+    if (!pte || (*pte & perm) != perm ){
+      user_mem_check_addr = (uintptr_t) MAX(va,va_b);
+      return -E_FAULT;
+    }
+    va += PGSIZE;
+  }
+  
+  if ((uintptr_t) end > ULIM){
+    user_mem_check_addr = MAX(ULIM, (uintptr_t)va_b);
+    return -E_FAULT;
+  }
 
   return 0;
 }
@@ -868,7 +891,7 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm) {
 //
 void
 user_mem_assert(struct Env *env, const void *va, size_t len, int perm) {
-  if (user_mem_check(env, va, len, perm | PTE_U) < 0) {
+  if (user_mem_check(env, va, len, perm | PTE_U | PTE_P) < 0) {
     cprintf("[%08x] user_mem_check assertion failure for "
             "va %016lx\n",
             env->env_id, (unsigned long)user_mem_check_addr);
