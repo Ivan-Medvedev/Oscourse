@@ -285,6 +285,12 @@ env_alloc(struct Env **newenv_store, envid_t parent_id) {
 
   // You will set e->env_tf.tf_rip later.
 
+  // Clear the page fault handler until user installs one.
+  e->env_pgfault_upcall = 0;
+
+  // Also clear the IPC receiving flag.
+  e->env_ipc_recving = 0;
+
   // commit the allocation
   env_free_list = e->env_link;
   *newenv_store = e;
@@ -450,15 +456,17 @@ load_icode(struct Env *e, uint8_t *binary) {
   //  to make sure that the environment starts executing there.
   //  What?  (See env_run() and env_pop_tf() below.)
 
-  // LAB 3: Your code here.
+  // LAB 3 code, modified in LAB 8
+  // из чего состоит Elf и Proghdr смотри в Elf64.h. Elf - это структура выполняемого фаила
   struct Elf *elf = (struct Elf *)binary; // binary приодится к типу указателя на структуру ELF
   if (elf->e_magic != ELF_MAGIC) {
-    panic("Unexpected ELF format! What magic is this?\n");
+    cprintf("Unexpected ELF format\n");
+    return;
   }
 
   struct Proghdr *ph = (struct Proghdr *)(binary + elf->e_phoff); // Proghdr = prog header. Он лежит со смещением elf->e_phoff относительно начала фаила
 
-  lcr3(PADDR(e->env_pml4e));
+  lcr3(e->env_cr3);
   for (size_t i = 0; i < elf->e_phnum; i++) { // elf->e_phnum - Число заголовков программы. Если у файла нет таблицы заголовков программы, это поле содержит 0.
     if (ph[i].p_type == ELF_PROG_LOAD) {
 
@@ -468,14 +476,14 @@ load_icode(struct Env *e, uint8_t *binary) {
       size_t memsz  = ph[i].p_memsz;
       size_t filesz = MIN(ph[i].p_filesz, memsz);
 
-      region_alloc(e, (void*) dst, memsz);
+      region_alloc(e, (void *)dst, memsz);
 
-      memcpy(dst, src, filesz);                // копируем в dst <- src  размера filesz
+      memcpy(dst, src, filesz);
       memset(dst + filesz, 0, memsz - filesz); // обнуление памяти по адресу dst + filesz, где количество нулей = memsz - filesz. Т.е. зануляем всю выделенную память сегмента кода, оставшуюяся после копирования src. Возможно, эта строка не нужна
     }
   }
 
-  lcr3(PADDR(kern_pml4e));
+  lcr3(kern_cr3);
   e->env_tf.tf_rip = elf->e_entry; //Виртуальный адрес точки входа, которому система передает управление при запуске процесса. в регистр rip записываем адрес точки входа для выполнения процесса
 #ifdef CONFIG_KSPACE
   bind_functions(e, binary); // Вызывается bind_functions, который связывает все что мы сделали выше (инициализация среды) с "кодом" самого процесса
@@ -486,12 +494,17 @@ load_icode(struct Env *e, uint8_t *binary) {
   region_alloc(e, (void *) (USTACKTOP - USTACKSIZE), USTACKSIZE);
   // LAB 8 code end
 
+  // LAB 8: One more hint for implementing sanitizers.
 #ifdef SANITIZE_USER_SHADOW_BASE
-  region_alloc(e, (void*) SANITIZE_USER_SHADOW_BASE, SANITIZE_USER_SHADOW_SIZE);
-  region_alloc(e, (void*) SANITIZE_USER_EXTRA_SHADOW_BASE, SANITIZE_USER_EXTRA_SHADOW_SIZE);
-  region_alloc(e, (void*) SANITIZE_USER_FS_SHADOW_BASE, SANITIZE_USER_FS_SHADOW_SIZE);
-  region_alloc(e, (void*) SANITIZE_USER_STACK_SHADOW_BASE, SANITIZE_USER_STACK_SHADOW_SIZE);
-  region_alloc(e, (void*) SANITIZE_USER_VPT_SHADOW_BASE, SANITIZE_USER_VPT_SHADOW_SIZE);
+  cprintf("Allocating shadow base %p:%p\n", (void *)(SANITIZE_USER_SHADOW_BASE), (void *)(SANITIZE_USER_SHADOW_BASE + SANITIZE_USER_SHADOW_SIZE));
+  region_alloc(e, (void *)SANITIZE_USER_SHADOW_BASE, SANITIZE_USER_SHADOW_SIZE);
+  // Our stack and pagetables are special, as they use higher addresses, so they gets a separate shadow.
+  cprintf("Allocating shadow ustack %p:%p\n", (void *)(SANITIZE_USER_STACK_SHADOW_BASE), (void *)(SANITIZE_USER_STACK_SHADOW_BASE + SANITIZE_USER_STACK_SHADOW_SIZE));
+  region_alloc(e, (void *)SANITIZE_USER_STACK_SHADOW_BASE, SANITIZE_USER_STACK_SHADOW_SIZE);
+  cprintf("Allocating shadow uextra %p:%p\n", (void *)(SANITIZE_USER_EXTRA_SHADOW_BASE), (void *)(SANITIZE_USER_EXTRA_SHADOW_BASE + SANITIZE_USER_EXTRA_SHADOW_SIZE));
+  region_alloc(e, (void *)SANITIZE_USER_EXTRA_SHADOW_BASE, SANITIZE_USER_EXTRA_SHADOW_SIZE);
+  cprintf("Allocating shadow vpt %p:%p\n", (void *)(SANITIZE_USER_VPT_SHADOW_BASE), (void *)(SANITIZE_USER_VPT_SHADOW_BASE + SANITIZE_USER_VPT_SHADOW_SIZE));
+  uvpt_shadow_map(e);
 #endif
 }
 
