@@ -620,8 +620,8 @@ env_destroy(struct Env *e) {
   // it traps to the kernel.
 
   e->env_status = ENV_DYING;
+  env_free(e);
   if (e == curenv) {
-    env_free(e);
     sched_yield();
   }
 }
