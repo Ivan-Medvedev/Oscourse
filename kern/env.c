@@ -528,7 +528,12 @@ env_create(uint8_t *binary, enum EnvType type) {
   }
 
   load_icode(env, binary);
-  env->env_type = type;  
+  env->env_type = type;
+
+  //Lab 10 code
+  if (type == ENV_TYPE_FS) {
+    env->env_tf.tf_rflags |= FL_IOPL_3;
+  }
 }
 
 //	
