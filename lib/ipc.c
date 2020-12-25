@@ -32,18 +32,19 @@ ipc_recv(envid_t *from_env_store, void *pg, int *perm_store) {
       *perm_store = 0;
     }
     return r;
-  } else {
-    if (from_env_store) {
-      *from_env_store = thisenv->env_ipc_from;
-    }
-    if (perm_store) {
-      *perm_store = thisenv->env_ipc_perm;
-    }
-#ifdef SANITIZE_USER_SHADOW_BASE
-    platform_asan_unpoison(pg, PGSIZE);
-#endif
-    return thisenv->env_ipc_value;
   }
+
+  // else
+  if (from_env_store) {
+    *from_env_store = thisenv->env_ipc_from;
+  }
+  if (perm_store) {
+    *perm_store = thisenv->env_ipc_perm;
+  }
+#ifdef SANITIZE_USER_SHADOW_BASE
+  platform_asan_unpoison(pg, PGSIZE);
+#endif
+  return thisenv->env_ipc_value;
 }
 
 // Send 'val' (and 'pg' with 'perm', if 'pg' is nonnull) to 'toenv'.

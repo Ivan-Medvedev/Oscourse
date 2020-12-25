@@ -111,7 +111,7 @@ clock_thdlr:
   jmp .
 #else
 TRAPHANDLER_NOEC(clock_thdlr, IRQ_OFFSET + IRQ_CLOCK)
-// LAB 8: Your code here.
+// LAB 8 code
 TRAPHANDLER_NOEC(divide_thdlr, T_DIVIDE)
 TRAPHANDLER_NOEC(debug_thdlr, T_DEBUG)
 TRAPHANDLER_NOEC(nmi_thdlr, T_NMI)
@@ -131,5 +131,11 @@ TRAPHANDLER(align_thdlr, T_ALIGN)
 TRAPHANDLER_NOEC(mchk_thdlr, T_MCHK)
 TRAPHANDLER_NOEC(simderr_thdlr, T_SIMDERR)
 TRAPHANDLER_NOEC(syscall_thdlr, T_SYSCALL)
+// LAB 8 code end
+
+// LAB 11 code
+TRAPHANDLER_NOEC(kbd_thdlr, IRQ_OFFSET + IRQ_KBD)
+TRAPHANDLER_NOEC(serial_thdlr, IRQ_OFFSET + IRQ_SERIAL)
+// LAB 11 code end
 
 #endif
